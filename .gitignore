@@ -1,0 +1,12 @@
+*.o
+*.a
+autom4te.cache/
+doc/
+Makefile
+config.h
+config.log
+config.status
+configure
+socat
+procan
+filan
