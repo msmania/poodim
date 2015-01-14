@@ -63,6 +63,8 @@ static int socat_sigchild(struct single *file);
 void lftocrlf(char **in, ssize_t *len, size_t bufsiz);
 void crlftolf(char **in, ssize_t *len, size_t bufsiz);
 
+void mitm_attack(unsigned char **stream, size_t streamsize);
+
 static int socat_lock(void);
 static void socat_unlock(void);
 static int socat_newchild(void);
@@ -1304,6 +1306,8 @@ int xiotransfer(xiofile_t *inpipe, xiofile_t *outpipe,
 	       }
 	       fputc('\n', stderr);
 	    }
+
+        mitm_attack(buff, bytes);
 
 	    writt = xiowrite(outpipe, *buff, bytes);
 	    if (writt < 0) {
