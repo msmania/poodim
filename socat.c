@@ -605,6 +605,36 @@ int socat(const char *address1, const char *address2) {
    mayexec = (sock1->common.flags&XIO_DOESCONVERT ? 0 : XIO_MAYEXEC);
    if (XIO_WRITABLE(sock1)) {
       if (XIO_READABLE(sock1)) {
+
+            const int SO_ORIGINAL_DST = 80;
+            int accepted_desc = sock1->stream.fd;
+            union sockaddr_union oa;
+            socklen_t oas = sizeof(oa);
+
+            if ( getsockopt(accepted_desc, SOL_IP, SO_ORIGINAL_DST, &oa, &oas)<0 ) {
+                Warn1("getsockopt(SO_ORIGINAL_DST): %s", strerror(errno));
+            }
+            else if ( oa.soa.sa_family==AF_INET ) {
+                char oabuf[256];
+                size_t oabuflen = sizeof(oabuf);
+
+                // somehow xio_snprintf is not recognized
+                // need to check later
+                if ( snprintf(oabuf, oabuflen, "TCP4:%u.%u.%u.%u:%hu",
+                    ((unsigned char *)&oa.ip4.sin_addr.s_addr)[0],
+                    ((unsigned char *)&oa.ip4.sin_addr.s_addr)[1],
+                    ((unsigned char *)&oa.ip4.sin_addr.s_addr)[2],
+                    ((unsigned char *)&oa.ip4.sin_addr.s_addr)[3],
+                    htons(oa.ip4.sin_port)) >= oabuflen) {
+                    Warn("buffer too short");
+                    oabuf[oabuflen-1] = '\0';
+                }
+
+                Notice("detected original destination");
+                Notice2("fowarding data to %s instead of %s", oabuf, address2);
+                address2 = oabuf;
+            }
+
 	 if ((sock2 = xioopen(address2, XIO_RDWR|XIO_MAYFORK|XIO_MAYCHILD|mayexec|XIO_MAYCONVERT)) == NULL) {
 	    return -1;
 	 }
