@@ -548,6 +548,11 @@ int closing = 0;	/* 0..no eof yet, 1..first eof just occurred,
 int socat(const char *address1, const char *address2) {
    int mayexec;
 
+    // replace address2 with the original destination address if nat is enabled
+    char oabuf[100];
+    char *oap = oabuf;
+    size_t oabuflen = sizeof(oabuf);
+
 #if 1
    if (Signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
       Warn1("signal(SIGPIPE, SIG_IGN): %s", strerror(errno));
@@ -605,8 +610,9 @@ int socat(const char *address1, const char *address2) {
    mayexec = (sock1->common.flags&XIO_DOESCONVERT ? 0 : XIO_MAYEXEC);
    if (XIO_WRITABLE(sock1)) {
       if (XIO_READABLE(sock1)) {
-
+            // SO_ORIGINAL_DST is defined in <linux/netfilter_ipv4.h>
             const int SO_ORIGINAL_DST = 80;
+
             int accepted_desc = sock1->stream.fd;
             union sockaddr_union oa;
             socklen_t oas = sizeof(oa);
@@ -614,24 +620,18 @@ int socat(const char *address1, const char *address2) {
             if ( getsockopt(accepted_desc, SOL_IP, SO_ORIGINAL_DST, &oa, &oas)<0 ) {
                 Warn1("getsockopt(SO_ORIGINAL_DST): %s", strerror(errno));
             }
-            else if ( oa.soa.sa_family==AF_INET ) {
-                char oabuf[256];
-                size_t oabuflen = sizeof(oabuf);
+            else if ( oa.soa.sa_family==AF_INET || oa.soa.sa_family==AF_INET6 ) {
+                const char prefix[] = "TCP:";
+                strcpy(oap, prefix);
+                oap += (sizeof(prefix)-1);
+                oabuflen -= (sizeof(prefix)-1);
 
-                // somehow xio_snprintf is not recognized
-                // need to check later
-                if ( snprintf(oabuf, oabuflen, "TCP4:%u.%u.%u.%u:%hu",
-                    ((unsigned char *)&oa.ip4.sin_addr.s_addr)[0],
-                    ((unsigned char *)&oa.ip4.sin_addr.s_addr)[1],
-                    ((unsigned char *)&oa.ip4.sin_addr.s_addr)[2],
-                    ((unsigned char *)&oa.ip4.sin_addr.s_addr)[3],
-                    htons(oa.ip4.sin_port)) >= oabuflen) {
-                    Warn("buffer too short");
-                    oabuf[oabuflen-1] = '\0';
-                }
+                if ( oa.soa.sa_family==AF_INET )
+                    sockaddr_inet4_info(&oa.ip4, oap, oabuflen);
+                else if ( oa.soa.sa_family==AF_INET6 )
+                    sockaddr_inet6_info(&oa.ip6, oap, oabuflen);
 
-                Notice("detected original destination");
-                Notice2("fowarding data to %s instead of %s", oabuf, address2);
+                Notice2("forwarding data to %s instead of %s", oabuf, address2);
                 address2 = oabuf;
             }
 
